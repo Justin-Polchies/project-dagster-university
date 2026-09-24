@@ -4,8 +4,7 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import pandas as pd
 
-import duckdb
-import os
+from dagster_duckdb import DuckDBResource
 
 from dagster_essentials.defs.assets import constants
 from dagster._utils.backoff import backoff
@@ -14,7 +13,7 @@ from datetime import datetime, timedelta
 @dg.asset(
     deps=["taxi_trips", "taxi_zones"]
 )
-def manhatten_stats() -> None:
+def manhatten_stats(database: DuckDBResource) -> None:
     query = """
         select
             zones.zone,
@@ -27,8 +26,8 @@ def manhatten_stats() -> None:
         group by zone, borough, geometry
     """
 
-    conn = duckdb.connect(os.getenv("DUCKDB_DATABASE"))
-    trips_by_zone = conn.execute(query).fetch_df()
+    with database.get_connection() as conn:
+        trips_by_zone = conn.execute(query).fetch_df()
 
     trips_by_zone["geometry"] = gpd.GeoSeries.from_wkt(trips_by_zone["geometry"])
     trips_by_zone = gpd.GeoDataFrame(trips_by_zone)
@@ -55,35 +54,28 @@ def manhattan_map() -> None:
     plt.close(fig)
 
 
+# src/dagster_essentials/defs/assets/metrics.py
 @dg.asset(
-    deps=["taxi_trips"]
+    deps = ["taxi_trips"]
 )
-def trips_by_week() -> None:
-    conn = backoff(
-        fn=duckdb.connect,
-        retry_on=(RuntimeError, duckdb.IOException),
-        kwargs={
-            "database": os.getenv("DUCKDB_DATABASE"),
-        },
-        max_retries=10,
-    )
+def trips_by_week(database: DuckDBResource) -> None:
 
-    current_date = datetime.strptime("2023-03-05", constants.DATE_FORMAT)
-    end_date = datetime.strptime("2023-04-01", constants.DATE_FORMAT)
+    current_date = datetime.strptime("2023-01-01", constants.DATE_FORMAT)
+    end_date = datetime.now()
 
     result = pd.DataFrame()
 
     while current_date < end_date:
         current_date_str = current_date.strftime(constants.DATE_FORMAT)
         query = f"""
-            select
-                vendor_id, total_amount, trip_distance, passenger_count
-            from trips
-            where pickup_datetime >= '{current_date_str}'::date
-              and pickup_datetime < '{current_date_str}'::date + interval '1 week'
+          select
+            vendor_id, total_amount, trip_distance, passenger_count
+          from trips
+          where pickup_datetime >= '{current_date_str}' and pickup_datetime < '{current_date_str}'::date + interval '1 week'
         """
 
-        data_for_week = conn.execute(query).fetch_df()
+        with database.get_connection() as conn:
+            data_for_week = conn.execute(query).fetch_df()
 
         aggregate = data_for_week.agg({
             "vendor_id": "count",
