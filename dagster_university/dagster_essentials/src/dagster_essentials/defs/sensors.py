@@ -37,7 +37,7 @@ def adhoc_request_sensor(context: dg.SensorEvaluationContext) -> dg.SensorResult
                                 "adhoc_request": {
                                     "config": {
                                         "filename": filename,
-                                        **request_config
+                                        **request_config,
                                     }
                                 }
                             }
