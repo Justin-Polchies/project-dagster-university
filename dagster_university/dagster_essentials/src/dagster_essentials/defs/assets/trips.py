@@ -1,3 +1,4 @@
+import pandas as pd
 import requests
 import dagster as dg
 
@@ -11,7 +12,7 @@ from dagster._utils.backoff import backoff
     partitions_def=monthly_partition,
     group_name="raw_files",
 )
-def taxi_trips_file(context: dg.AssetExecutionContext) -> None:
+def taxi_trips_file(context: dg.AssetExecutionContext) -> dg.MaterializeResult:
     """
         The raw parquet files for the taxi trips dataset. Sourced from the NYC Open Data portal.
     """
@@ -24,12 +25,19 @@ def taxi_trips_file(context: dg.AssetExecutionContext) -> None:
 
     with open(constants.TAXI_TRIPS_TEMPLATE_FILE_PATH.format(month_to_fetch), "wb") as output_file:
         output_file.write(raw_trips.content)
+    num_rows = len(pd.read_parquet(constants.TAXI_TRIPS_TEMPLATE_FILE_PATH.format(month_to_fetch)))
+
+    return dg.MaterializeResult(
+         metadata={
+              'Number of records': dg.MetadataValue.int(num_rows)
+         }
+    )
 
 
 @dg.asset(
           group_name="raw_files"
 )
-def taxi_zone_file() -> None:
+def taxi_zone_file() -> dg.MaterializeResult:
     """
         This asset will contain a unique identifier and name for each part of NYC as a distinct taxi xone. Sourced from the NYC Open Data portal.
     """
@@ -38,6 +46,14 @@ def taxi_zone_file() -> None:
     )
     with open(constants.TAXI_ZONES_FILE_PATH, "wb") as output_file:
         output_file.write(raw_taxi_zones.content)
+    num_rows = len(pd.read_csv(constants.TAXI_ZONES_FILE_PATH))
+
+    return dg.MaterializeResult(
+         metadata={
+              'Number of recordes': dg.MetadataValue.int(num_rows)
+         }
+    )
+                   
 
 
 # src/dagster_essentials/defs/assets/trips.py
@@ -73,8 +89,10 @@ def taxi_trips(context: dg.AssetExecutionContext,database: DuckDBResource) -> No
     with database.get_connection() as conn:
         conn.execute(query)
 
-    # src/dagster_essentials/defs/assets/trips.py
+    
 
+
+    # src/dagster_essentials/defs/assets/trips.py
 @dg.asset(
     deps=["taxi_zones_file"],
     group_name="ingested",
