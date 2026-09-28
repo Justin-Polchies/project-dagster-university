@@ -1,3 +1,4 @@
+# src/dagster_essentials/defs/sensors.py
 import dagster as dg
 import os
 import json
@@ -5,17 +6,16 @@ import json
 from dagster_essentials.defs.jobs import adhoc_request_job
 
 @dg.sensor(
-        job=adhoc_request_job
+    job=adhoc_request_job
 )
-def adhoc_request_sensor(context: dg.SensorEvaluationContext):
+def adhoc_request_sensor(context: dg.SensorEvaluationContext) -> dg.SensorResult:
     PATH_TO_REQUESTS = os.path.join(
+        os.path.dirname(__file__),
         "../../../",
-        'data/requests',
+        "data/requests",
     )
-
     previous_state = json.loads(context.cursor) if context.cursor else {}
     current_state = {}
-
     runs_to_request = []
 
     for filename in os.listdir(PATH_TO_REQUESTS):
